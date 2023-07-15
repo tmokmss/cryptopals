@@ -7,7 +7,7 @@ use std::io;
 use std::str;
 use std::{fmt::Write, num::ParseIntError};
 
-mod break_xor;
+use super::break_xor;
 
 fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
     (0..s.len())
