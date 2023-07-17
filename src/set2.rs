@@ -1,7 +1,8 @@
 use openssl::symm::{Cipher, Crypter, Mode};
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{Rng, RngCore, SeedableRng};
 use std::cmp;
+use std::collections::HashMap;
 use std::str;
 
 use super::util;
@@ -15,6 +16,50 @@ fn padding(bytes: &[u8], size: usize, fill: u8) -> Vec<u8> {
         }
     }
     res
+}
+
+fn parse_kv(input: &str) -> HashMap<&str, &str> {
+    input
+        .split('&')
+        .map(|s| s.split('='))
+        .map(|mut pair| (pair.next().unwrap(), pair.next().unwrap()))
+        .collect::<HashMap<_, _>>()
+}
+
+fn encode_kv(input: &HashMap<&str, &str>) -> String {
+    let mut keys = input.keys().collect::<Vec<&&str>>();
+    keys.sort();
+
+    keys.into_iter()
+        .map(|k| format!("{}={}", k, input[k]))
+        .collect::<Vec<String>>()
+        .join("&")
+        .to_string()
+}
+
+const PROFILE_KEY: &[u8; 16] = b"YELLOW SUBMARINE";
+
+fn profile_for(mail: &str, role: &str) -> String {
+    let profile: HashMap<&str, &str> =
+        HashMap::from([("email", mail), ("uid", "10"), ("role", role)]);
+    encode_kv(&profile)
+}
+
+fn encrypt_profile(profile: &str) -> Vec<u8> {
+    ecb_encrypt(profile.as_bytes(), PROFILE_KEY)
+}
+
+fn decrypt_profile(profile: &[u8]) -> String {
+    let dec = ecb_decrypt(profile, PROFILE_KEY);
+    let mut pad_end = dec.len();
+    for i in 0..dec.len() {
+        if dec[dec.len() - i - 1] != 0 {
+            pad_end = dec.len() - i;
+            break;
+        }
+    }
+    println!("{:?}", dec);
+    str::from_utf8(&dec[0..pad_end]).unwrap().trim().to_string()
 }
 
 fn encryption_oracle(input: &[u8]) -> Vec<u8> {
@@ -78,6 +123,73 @@ fn encryption_oracle12(input: &[u8]) -> Vec<u8> {
         res.append(&mut output);
     }
     res
+}
+
+fn encryption_oracle14(input: &[u8]) -> Vec<u8> {
+    let mut rng = StdRng::seed_from_u64(0);
+    let key = rng.gen::<[u8; 16]>();
+    let block_size = 16usize;
+    let mut bytes = vec![0; rng.gen_range(1..50)];
+    rng.fill_bytes(&mut bytes);
+    bytes.extend_from_slice(input);
+    let secret = util::load_base64_ignoring_newlines("input/2-12.txt");
+    bytes.extend(secret);
+    let mut res = Vec::new();
+
+    for i in 0..(bytes.len() + block_size - 1) / block_size {
+        let target = padding(
+            &bytes[i * block_size..cmp::min((i + 1) * block_size, bytes.len())],
+            block_size,
+            0,
+        );
+        let mut encrypter =
+            Crypter::new(Cipher::aes_128_ecb(), Mode::Encrypt, &key, Some(&[])).unwrap();
+        encrypter.pad(false);
+        let mut output = vec![0; bytes.len() + block_size];
+        let mut count = encrypter.update(&target[..], &mut output).unwrap();
+        count += encrypter.finalize(&mut output[count..]).unwrap();
+        output.truncate(count);
+        res.append(&mut output);
+    }
+    res
+}
+
+fn ecb_encrypt(bytes: &[u8], key: &[u8]) -> Vec<u8> {
+    const BLOCK_SIZE: usize = 16;
+    let mut output = Vec::new();
+    let mut crypter = Crypter::new(Cipher::aes_128_ecb(), Mode::Encrypt, &key, Some(&[])).unwrap();
+    let mut buffer = [0; BLOCK_SIZE * 2];
+
+    for i in 0..(bytes.len() + BLOCK_SIZE - 1) / BLOCK_SIZE {
+        let target = padding(
+            &bytes[i * BLOCK_SIZE..cmp::min((i + 1) * BLOCK_SIZE, bytes.len())],
+            BLOCK_SIZE,
+            0,
+        );
+        crypter.pad(false);
+        let count = crypter.update(&target[..], &mut buffer).unwrap();
+        output.extend_from_slice(&buffer[0..count]);
+    }
+    let count = crypter.finalize(&mut buffer).unwrap();
+    output.extend_from_slice(&buffer[0..count]);
+    output
+}
+
+fn ecb_decrypt(bytes: &[u8], key: &[u8]) -> Vec<u8> {
+    const BLOCK_SIZE: usize = 16;
+    let mut output = Vec::new();
+    let mut crypter = Crypter::new(Cipher::aes_128_ecb(), Mode::Decrypt, &key, Some(&[])).unwrap();
+    let mut buffer = [0; BLOCK_SIZE * 2];
+
+    for i in 0..(bytes.len() + BLOCK_SIZE - 1) / BLOCK_SIZE {
+        let target = &bytes[i * BLOCK_SIZE..(i + 1) * BLOCK_SIZE];
+        crypter.pad(false);
+        let count = crypter.update(&target[..], &mut buffer).unwrap();
+        output.extend_from_slice(&buffer[0..count]);
+    }
+    let count = crypter.finalize(&mut buffer).unwrap();
+    output.extend_from_slice(&buffer[0..count]);
+    output
 }
 
 fn cbc_encrypt(bytes: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>, &'static str> {
@@ -203,6 +315,82 @@ pub fn challenge12() {
     println!("{}", str::from_utf8(&result).unwrap());
 }
 
+pub fn challenge14() {
+    const BLOCK_SIZE: usize = 16;
+    // find prefix length
+    let len = BLOCK_SIZE * 6;
+    let mut input = vec![0; len];
+    let org = encryption_oracle14(&input);
+    let mut boundary_block_index = 0;
+    println!("{:?}", org);
+
+    for i in 0..(org.len() + BLOCK_SIZE - 1) / BLOCK_SIZE - 1 {
+        if &org[i * BLOCK_SIZE..(i + 1) * BLOCK_SIZE]
+            == &org[(i + 1) * BLOCK_SIZE..(i + 2) * BLOCK_SIZE]
+        {
+            boundary_block_index = i - 1;
+            break;
+        }
+    }
+
+    input = vec![0; BLOCK_SIZE];
+    /*
+     * | 123456   789012345678  901234
+     * | prefix |    input    | target |
+     * | 123456 | 000000000000| xxxxxx |
+     * | 123456 | 000000000001| xxxxxx |
+     * |
+     */
+    let mut prefix_offset = 0;
+    for i in 0..BLOCK_SIZE {
+        input[BLOCK_SIZE - i - 1] = 1;
+        let new = encryption_oracle14(&input);
+        if &new[boundary_block_index * BLOCK_SIZE..(boundary_block_index + 1) * BLOCK_SIZE]
+            != &org[boundary_block_index * BLOCK_SIZE..(boundary_block_index + 1) * BLOCK_SIZE]
+        {
+            prefix_offset = i;
+            break;
+        }
+        input[BLOCK_SIZE - i - 1] = 0;
+    }
+    let prefix_len = boundary_block_index * BLOCK_SIZE + prefix_offset;
+    println!(
+        "prefix_tail_block:{}, prefix_offset: {}",
+        boundary_block_index, prefix_offset
+    );
+
+    let target_len = encryption_oracle14(&vec![0; 1]).len() - prefix_len - 1;
+    let mut input = vec![
+        0;
+        ((target_len + BLOCK_SIZE - 1) / BLOCK_SIZE) * BLOCK_SIZE + BLOCK_SIZE
+            - prefix_offset
+    ];
+    let len = input.len();
+    let mut result = Vec::new();
+    println!("{}, {}", target_len, len);
+    for i in 0..len {
+        let res = encryption_oracle14(&input[0..len - i - 1]);
+        if res.len() < len + prefix_len {
+            break;
+        }
+        let org = &res[0..len + prefix_len];
+        // println!("{:?}", org);
+        input.remove(0);
+        input.push(0);
+        for c in 0..128 {
+            input[len - 1] = c;
+            let res = &encryption_oracle14(&input[0..len])[0..len + prefix_len];
+            if org == res {
+                println!("found: {}", c);
+                result.push(c);
+                break;
+            }
+        }
+        println!("{:?}", input);
+    }
+    println!("{}", str::from_utf8(&result).unwrap());
+}
+
 #[test]
 fn challenge9() {
     let arr = b"YELLOW SUBMARINE";
@@ -218,4 +406,30 @@ fn challenge10_test() {
     let encrypted = cbc_encrypt(input, key, iv).unwrap();
     let decrypted = cbc_decrypt(&encrypted[..], key, iv).unwrap();
     assert_eq!(input, &decrypted[0..input.len()]);
+}
+
+#[test]
+fn kv_test() {
+    let input = "baz=qux&foo=bar&zap=zazzle";
+    let res = parse_kv(input);
+    assert_eq!(
+        res,
+        HashMap::from([("foo", "bar"), ("baz", "qux"), ("zap", "zazzle")])
+    );
+    let kv = encode_kv(&HashMap::from([
+        ("foo", "bar"),
+        ("baz", "qux"),
+        ("zap", "zazzle"),
+    ]));
+    assert_eq!(input, kv);
+}
+
+#[test]
+fn challenge13() {
+    let profile = profile_for("user1@example.com", "admin");
+    let encrypted = encrypt_profile(&profile);
+    println!("{:?}", encrypted);
+    let decrypted = decrypt_profile(&encrypted);
+    println!("{:?}", decrypted);
+    assert_eq!(profile, decrypted);
 }
