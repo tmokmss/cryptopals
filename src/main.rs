@@ -1,10 +1,11 @@
 use std::io;
-mod set1;
 mod break_xor;
+mod util;
+mod set1;
 mod set2;
 
 fn main() -> io::Result<()> {
-    set1::challenge8();
+    set2::challenge12();
 
     Ok(())
 }
