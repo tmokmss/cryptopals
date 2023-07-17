@@ -154,6 +154,20 @@ fn encryption_oracle14(input: &[u8]) -> Vec<u8> {
     res
 }
 
+fn encrypt_cookie(input: &str) -> Vec<u8> {
+    let mut target = "comment1=cooking%20MCs;userdata=".to_string();
+    target += &input.replace(";", "\\;").replace("=", "\\=");
+    target += ";comment2=%20like%20a%20pound%20of%20bacon";
+    cbc_encrypt(target.as_bytes(), PROFILE_KEY, b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F").unwrap()
+}
+
+fn decrypt_cookie(bytes: &[u8]) -> bool {
+    let res = cbc_decrypt(bytes, PROFILE_KEY, b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F").unwrap();
+    let str = unsafe {str::from_utf8_unchecked(&res)};
+    println!("{}", str);
+    str.contains(";admin=true;")
+}
+
 fn ecb_encrypt(bytes: &[u8], key: &[u8]) -> Vec<u8> {
     const BLOCK_SIZE: usize = 16;
     let mut output = Vec::new();
@@ -391,6 +405,23 @@ pub fn challenge14() {
     println!("{}", str::from_utf8(&result).unwrap());
 }
 
+fn validate_pkcs_padding(bytes: &[u8]) -> bool {
+    const BLOCK_SIZE: usize = 16;
+    if bytes.len() % BLOCK_SIZE != 0 {
+        return false;
+    }
+    let mut count = 0u8;
+    let last = bytes[bytes.len() - 1];
+    for i in 0..BLOCK_SIZE {
+        if bytes[bytes.len() - i - 1] == last {
+            count += 1;
+        } else {
+            break;
+        }
+    }
+    count == last
+}
+
 #[test]
 fn challenge9() {
     let arr = b"YELLOW SUBMARINE";
@@ -432,4 +463,41 @@ fn challenge13() {
     let decrypted = decrypt_profile(&encrypted);
     println!("{:?}", decrypted);
     assert_eq!(profile, decrypted);
+}
+
+#[test]
+fn challenge15() {
+    assert_eq!(validate_pkcs_padding(b"ICE ICE BABY\x04\x04\x04\x04"), true);
+    assert_eq!(
+        validate_pkcs_padding(b"ICE ICE BABY\x05\x05\x05\x05"),
+        false
+    );
+    assert_eq!(
+        validate_pkcs_padding(b"ICE ICE BAB\x05\x05\x05\x05\x05"),
+        true
+    );
+    assert_eq!(
+        validate_pkcs_padding(b"\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10"),
+        true
+    );
+    assert_eq!(
+        validate_pkcs_padding(b"\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10"),
+        false
+    );
+}
+
+#[test]
+fn challenge16() {
+    /*
+     * ; 0011 1011
+     * : 0011 1010
+     * = 0011 1101
+     * 9 0011 1001
+     */
+    let mut encrypted = encrypt_cookie("1234567890123456:admin9true:");
+    encrypted[32] ^= 1;
+    encrypted[38] ^= 4;
+    encrypted[43] ^= 1;
+    let res = decrypt_cookie(&encrypted);
+    assert_eq!(res, true);
 }
