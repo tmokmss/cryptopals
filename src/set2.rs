@@ -72,13 +72,13 @@ fn encryption_oracle(input: &[u8]) -> Vec<u8> {
     let key = rand::thread_rng().gen::<[u8; 16]>();
 
     for i in 0..(bytes.len() + block_size - 1) / block_size {
-        let useEcb = rng.gen_range(0..=1);
+        let use_ecb = rng.gen_range(0..=1);
         let target = padding(
             &bytes[i * block_size..cmp::min((i + 1) * block_size, bytes.len())],
             block_size,
             0,
         );
-        if useEcb == 0 {
+        if use_ecb == 0 {
             let mut encrypter =
                 Crypter::new(Cipher::aes_128_ecb(), Mode::Encrypt, &key, Some(&[])).unwrap();
             encrypter.pad(false);
@@ -282,7 +282,7 @@ pub fn challenge11() {
     let mut result = vec![false];
     for i in 1..crypt.len() / block_size {
         let me = &crypt[i * block_size..(i + 1) * block_size];
-        if (ecb_found) {
+        if ecb_found {
             result.push(me == ecb);
         } else {
             for j in i..crypt.len() / block_size {
