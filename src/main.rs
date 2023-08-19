@@ -3,9 +3,10 @@ mod break_xor;
 mod util;
 mod set1;
 mod set2;
+mod set3;
 
 fn main() -> io::Result<()> {
-    set2::challenge14();
+    set3::challenge17();
 
     Ok(())
 }
