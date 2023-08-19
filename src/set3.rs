@@ -14,7 +14,7 @@ struct Challenge17 {
 
 impl Challenge17 {
     fn encrypt(&self) -> (Vec<u8>, Vec<u8>) {
-        let iv =  rand::thread_rng().gen::<[u8; BLOCK_SIZE]>().to_vec();
+        let iv = rand::thread_rng().gen::<[u8; BLOCK_SIZE]>().to_vec();
         let encrypted = util::cbc_encrypt(&self.target, &self.key, &iv).unwrap();
         (encrypted, iv)
     }
@@ -65,7 +65,7 @@ fn decrypt_block(block: &[u8], iv: &[u8], challenge: &Challenge17) -> Vec<u8> {
             if challenge.decrypt_and_validate(block, &ivv) {
                 if i == 1 {
                     ivv[BLOCK_SIZE - 2] ^= 1;
-                    if !challenge.decrypt_and_validate(block, &ivv) { 
+                    if !challenge.decrypt_and_validate(block, &ivv) {
                         // false positive
                         // println!("false positive!");
                         ivv[BLOCK_SIZE - 2] ^= 1;
@@ -90,6 +90,33 @@ fn decrypt_block(block: &[u8], iv: &[u8], challenge: &Challenge17) -> Vec<u8> {
     }
 
     dec
+}
+
+fn ctr_encrypt(input: &[u8], key: &[u8], nonce: u64) -> Vec<u8> {
+    let block_size = 16usize;
+    let mut result = vec![0u8; input.len()];
+    for i in 0..((input.len() + block_size - 1) / block_size) {
+        let target = [nonce.to_le_bytes(), u64::try_from(i).unwrap().to_le_bytes()].concat();
+        println!("{:?}", target);
+        let stream = util::ecb_encrypt(&target, &key);
+        for j in 0..block_size {
+            let idx = j + i * block_size;
+            if idx >= input.len() {
+                break;
+            }
+            result[idx] = input[idx] ^ stream[j];
+        }
+    }
+
+    result
+}
+
+pub fn challenge18() {
+    let input = util::load_base64_ignoring_newlines("input/3-18.txt");
+    let key = b"YELLOW SUBMARINE";
+    let nonce = 0u64;
+    let result = ctr_encrypt(&input, key, nonce);
+    println!("{}", str::from_utf8(&result).unwrap());
 }
 
 pub fn challenge17() {

@@ -25,7 +25,7 @@ pub fn validate_pkcs_padding(bytes: &[u8]) -> bool {
         return false;
     }
     let last = bytes[bytes.len() - 1];
-    if last as usize > BLOCK_SIZE || last == 0{
+    if last as usize > BLOCK_SIZE || last == 0 {
         return false;
     }
     for i in 1..=last as usize {
@@ -36,6 +36,25 @@ pub fn validate_pkcs_padding(bytes: &[u8]) -> bool {
     true
 }
 
+pub fn ecb_encrypt(bytes: &[u8], key: &[u8]) -> Vec<u8> {
+    const BLOCK_SIZE: usize = 16;
+    let mut output = Vec::new();
+    let mut crypter = Crypter::new(Cipher::aes_128_ecb(), Mode::Encrypt, &key, Some(&[])).unwrap();
+    let mut buffer = [0; BLOCK_SIZE * 2];
+    let mut input = bytes.to_vec();
+
+    pkcs_padding(&mut input, u8::try_from(BLOCK_SIZE).unwrap());
+    for i in 0..(input.len() + BLOCK_SIZE - 1) / BLOCK_SIZE {
+        let target = &input[i * BLOCK_SIZE..(i + 1) * BLOCK_SIZE];
+        crypter.pad(false);
+        let count = crypter.update(&target[..], &mut buffer).unwrap();
+        output.extend_from_slice(&buffer[0..count]);
+    }
+    let count = crypter.finalize(&mut buffer).unwrap();
+    output.extend_from_slice(&buffer[0..count]);
+    output
+}
+
 pub fn cbc_encrypt(bytes: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>, &'static str> {
     let block_size = 16usize;
     if iv.len() != block_size {
@@ -43,16 +62,16 @@ pub fn cbc_encrypt(bytes: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>, &'sta
     }
     let mut res = Vec::new();
     let mut prev = iv;
+    let mut input = bytes.to_vec();
 
-    for i in 0..(bytes.len() + block_size - 1) / block_size {
+    pkcs_padding(&mut input, u8::try_from(block_size).unwrap());
+    for i in 0..(input.len() + block_size - 1) / block_size {
         let mut encrypter =
             Crypter::new(Cipher::aes_128_ecb(), Mode::Encrypt, key, Some(iv)).unwrap();
         encrypter.pad(false);
 
-        let mut output = vec![0; bytes.len() + block_size];
-        let mut target =
-            bytes[i * block_size..cmp::min((i + 1) * block_size, bytes.len())].to_vec();
-        pkcs_padding(&mut target, u8::try_from(block_size).unwrap());
+        let mut output = vec![0; input.len() + block_size];
+        let target = &input[i * block_size..(i + 1) * block_size];
         let input = (0..block_size)
             .map(|i| prev[i] ^ target[i])
             .collect::<Vec<u8>>();
