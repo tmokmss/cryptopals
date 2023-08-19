@@ -9,6 +9,10 @@ pub fn load_base64_ignoring_newlines(path: &str) -> Vec<u8> {
     general_purpose::STANDARD.decode(contents).unwrap()
 }
 
+pub fn load_base64_each_line(path: &str) -> Vec<Vec<u8>> {
+    fs::read_to_string(path).unwrap().split("\n").map(|line| general_purpose::STANDARD.decode(line).unwrap()).collect()
+}
+
 pub fn pkcs_padding(bytes: &mut Vec<u8>, size: u8) {
     let remain = u8::try_from(bytes.len() % (size as usize)).unwrap();
     let add = size - remain;

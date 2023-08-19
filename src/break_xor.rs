@@ -45,7 +45,7 @@ fn split(input: &[u8], key_length: u32) -> Vec<Vec<u8>> {
     res
 }
 
-fn score_english(s: &[u8]) -> f64 {
+pub fn score_english(s: &[u8]) -> f64 {
     let prob = [
         8.4966,  // "A"
         2.0720,  // "B"

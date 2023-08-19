@@ -3,6 +3,7 @@ use rand::Rng;
 use std::fs;
 use std::str;
 
+use crate::break_xor;
 use crate::util::{self, validate_pkcs_padding};
 
 const BLOCK_SIZE: usize = 16;
@@ -92,12 +93,32 @@ fn decrypt_block(block: &[u8], iv: &[u8], challenge: &Challenge17) -> Vec<u8> {
     dec
 }
 
+pub fn challenge17() {
+    for q in 0..10 {
+        let challenge = build_challenge17(q);
+        let (encrypted, iv) = challenge.encrypt();
+        let mut prev = iv;
+        let mut result = vec![0u8, 0];
+        for i in 0..(encrypted.len() / BLOCK_SIZE) {
+            let block = &encrypted[(i * BLOCK_SIZE)..(i + 1) * BLOCK_SIZE];
+            let mut decrypted = decrypt_block(block, &prev, &challenge);
+            prev = block.to_vec();
+            result.append(&mut decrypted);
+            // println!("{}", str::from_utf8(&result).unwrap());
+        }
+        match str::from_utf8(&result) {
+            Ok(res) => println!("{}", res),
+            Err(error) => println!("{}", error),
+        };
+    }
+}
+
 fn ctr_encrypt(input: &[u8], key: &[u8], nonce: u64) -> Vec<u8> {
     let block_size = 16usize;
     let mut result = vec![0u8; input.len()];
     for i in 0..((input.len() + block_size - 1) / block_size) {
         let target = [nonce.to_le_bytes(), u64::try_from(i).unwrap().to_le_bytes()].concat();
-        println!("{:?}", target);
+        // println!("{:?}", target);
         let stream = util::ecb_encrypt(&target, &key);
         for j in 0..block_size {
             let idx = j + i * block_size;
@@ -119,22 +140,36 @@ pub fn challenge18() {
     println!("{}", str::from_utf8(&result).unwrap());
 }
 
-pub fn challenge17() {
-    for q in 0..10 {
-        let challenge = build_challenge17(q);
-        let (encrypted, iv) = challenge.encrypt();
-        let mut prev = iv;
-        let mut result = vec![0u8, 0];
-        for i in 0..(encrypted.len() / BLOCK_SIZE) {
-            let block = &encrypted[(i * BLOCK_SIZE)..(i + 1) * BLOCK_SIZE];
-            let mut decrypted = decrypt_block(block, &prev, &challenge);
-            prev = block.to_vec();
-            result.append(&mut decrypted);
-            // println!("{}", str::from_utf8(&result).unwrap());
+pub fn challenge19() {
+    let inputs = util::load_base64_each_line("input/3-19.txt");
+    let key = rand::thread_rng().gen::<[u8; 16]>();
+    let crypts: Vec<Vec<u8>> = inputs.iter().map(|i| ctr_encrypt(i, &key, 0)).collect();
+    let mut result = vec![0u8; 0];
+    for i in 0..=40 {
+        let mut max = 0f64;
+        let mut ans = 0;
+        for x in 0..=255u8 {
+            let s: Vec<u8> = crypts
+                .iter()
+                .map(|c| if i < c.len() { c[i] ^ x } else { 0 })
+                .collect();
+            let score = break_xor::score_english(&s);
+            if score > max {
+                ans = x;
+                max = score;
+            }
         }
-        match str::from_utf8(&result) {
-            Ok(res) => println!("{}", res),
-            Err(error) => println!("{}", error),
-        };
+        result.push(ans);
+    }
+    let answers: Vec<Vec<u8>> = crypts.iter().map(|c| {
+        let mut ans = vec![0u8; c.len()];
+        for i in 0..c.len() {
+            ans[i] = c[i] ^ result[i];
+        }
+        ans
+    }).collect();
+    println!("{:?}", answers);
+    for ans in answers {
+        println!("{}", str::from_utf8(&ans).unwrap());
     }
 }
