@@ -6,7 +6,7 @@ mod set2;
 mod set3;
 
 fn main() -> io::Result<()> {
-    set3::challenge19();
+    set3::challenge20();
 
     Ok(())
 }

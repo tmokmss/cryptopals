@@ -173,3 +173,41 @@ pub fn challenge19() {
         println!("{}", str::from_utf8(&ans).unwrap());
     }
 }
+
+pub fn challenge20() {
+    let inputs = util::load_base64_each_line("input/3-20.txt");
+    let key = rand::thread_rng().gen::<[u8; 16]>();
+    let crypts: Vec<Vec<u8>> = inputs.iter().map(|i| ctr_encrypt(i, &key, 0)).collect();
+
+    let max_length = crypts.iter().map(|c: &Vec<u8>| c.len()).max().unwrap();
+    let min_length = crypts.iter().map(|c| c.len()).min().unwrap();
+    let mut key = vec![0u8; 0];
+    for i in 0..=min_length {
+        let mut max = 0f64;
+        let mut ans = 0;
+        for x in 0..=255u8 {
+            let s: Vec<u8> = crypts
+                .iter()
+                .map(|c| if i < c.len() { c[i] ^ x } else { 0 })
+                .collect();
+            let score = break_xor::score_english(&s);
+            if score > max {
+                ans = x;
+                max = score;
+            }
+        }
+        key.push(ans);
+    }
+    let answers: Vec<Vec<u8>> = crypts.iter().map(|c| {
+        let len = min_length;
+        let mut ans = vec![0u8; len];
+        for i in 0..len {
+            ans[i] = c[i] ^ key[i];
+        }
+        ans
+    }).collect();
+    println!("{:?}", key);
+    for ans in answers {
+        println!("{}", str::from_utf8(&ans).unwrap());
+    }
+}
