@@ -23,6 +23,11 @@ pub fn pkcs_padding(bytes: &mut Vec<u8>, size: u8) {
     }
 }
 
+/// # Examples
+/// ```
+/// assert_eq!(util::util::validate_pkcs_padding(b"YELLOW SUBMARINE"), false);
+/// assert_eq!(util::util::validate_pkcs_padding(b"ICE ICE BABY\x04\x04\x04\x04"), true);
+/// ```
 pub fn validate_pkcs_padding(bytes: &[u8]) -> bool {
     const BLOCK_SIZE: usize = 16;
     if bytes.len() % BLOCK_SIZE != 0 {

@@ -2,9 +2,13 @@ use base64::{engine::general_purpose, Engine as _};
 use rand::Rng;
 use std::fs;
 use std::str;
+use std::time::UNIX_EPOCH;
 
 use crate::break_xor;
+use crate::mt19937;
 use crate::util::{self, validate_pkcs_padding};
+use std::thread::sleep;
+use std::time::{Duration, SystemTime};
 
 const BLOCK_SIZE: usize = 16;
 
@@ -161,13 +165,16 @@ pub fn challenge19() {
         }
         result.push(ans);
     }
-    let answers: Vec<Vec<u8>> = crypts.iter().map(|c| {
-        let mut ans = vec![0u8; c.len()];
-        for i in 0..c.len() {
-            ans[i] = c[i] ^ result[i];
-        }
-        ans
-    }).collect();
+    let answers: Vec<Vec<u8>> = crypts
+        .iter()
+        .map(|c| {
+            let mut ans = vec![0u8; c.len()];
+            for i in 0..c.len() {
+                ans[i] = c[i] ^ result[i];
+            }
+            ans
+        })
+        .collect();
     println!("{:?}", answers);
     for ans in answers {
         println!("{}", str::from_utf8(&ans).unwrap());
@@ -198,16 +205,68 @@ pub fn challenge20() {
         }
         key.push(ans);
     }
-    let answers: Vec<Vec<u8>> = crypts.iter().map(|c| {
-        let len = min_length;
-        let mut ans = vec![0u8; len];
-        for i in 0..len {
-            ans[i] = c[i] ^ key[i];
-        }
-        ans
-    }).collect();
+    let answers: Vec<Vec<u8>> = crypts
+        .iter()
+        .map(|c| {
+            let len = min_length;
+            let mut ans = vec![0u8; len];
+            for i in 0..len {
+                ans[i] = c[i] ^ key[i];
+            }
+            ans
+        })
+        .collect();
     println!("{:?}", key);
     for ans in answers {
         println!("{}", str::from_utf8(&ans).unwrap());
     }
+}
+
+fn challenge22_helper() -> u32 {
+    let mut rng = rand::thread_rng();
+    let r = rng.gen_range(0..10);
+    sleep(Duration::new(r, 0));
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as u32;
+    let mut rand = mt19937::MT19937::new(now);
+    let r = rng.gen_range(0..10);
+    sleep(Duration::new(r, 0));
+    rand.next()
+}
+
+pub fn challenge22() {
+    let start: u32 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as u32;
+    let result = challenge22_helper();
+    println!("first random number: {}", result);
+    let end: u32 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as u32;
+    for i in start..=end {
+        let mut rand = mt19937::MT19937::new(i);
+        if result == rand.next() {
+            println!("detecetd! {}", i);
+            break;
+        }
+    }
+}
+
+
+pub fn challenge23() {
+    let mut mt = mt19937::MT19937::new(1234);
+    let mut state = [0u32; 624];
+    for i in (0..state.len()) {
+        let r = mt.next();
+        state[i] = mt19937::untemper(r);
+    }
+    let mut mt_clone = mt19937::MT19937::from_state(state);
+    println!("original: {}, clone:{}", mt.next(), mt_clone.next());
+    println!("original: {}, clone:{}", mt.next(), mt_clone.next());
+    println!("original: {}, clone:{}", mt.next(), mt_clone.next());
+    println!("original: {}, clone:{}", mt.next(), mt_clone.next());
 }

@@ -9,3 +9,9 @@ edition = "2021"
 base64 = "0.21.2"
 rand = "0.8.5"
 openssl = { version = "0.10", features = ["vendored"] }
+
+[lib]
+name = "util"
+path = "src/lib.rs"
+edition = "2021"
+crate-type = ["lib"]
