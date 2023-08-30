@@ -7,6 +7,6 @@ mod set3;
 mod util;
 
 fn main() -> io::Result<()> {
-    set3::challenge23();
+    set3::challenge24();
     Ok(())
 }

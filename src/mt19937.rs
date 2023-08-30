@@ -24,7 +24,7 @@ impl MT19937 {
         let mut x = [0u32; n];
         x[0] = seed;
         for i in 1..n {
-            x[i] = f.wrapping_mul(x[i - 1] ^ (x[i - 1] >> (w - 2))) + (i as u32);
+            x[i] = f.wrapping_mul(x[i - 1] ^ (x[i - 1] >> (w - 2))).wrapping_add(i as u32);
         }
         Self { x, index: n }
     }

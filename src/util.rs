@@ -1,8 +1,25 @@
 use base64::{engine::general_purpose, Engine as _};
 use openssl::symm::{Cipher, Crypter, Mode};
 use std::cmp;
+use std::fmt::Write;
 use std::fs;
+use std::num::ParseIntError;
 use std::str;
+
+pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
+        .collect()
+}
+
+pub fn encode_hex(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        write!(&mut s, "{:02x}", b).unwrap();
+    }
+    s
+}
 
 pub fn load_base64_ignoring_newlines(path: &str) -> Vec<u8> {
     let contents = fs::read_to_string(path).unwrap().replace("\n", "");

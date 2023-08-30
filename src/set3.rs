@@ -1,3 +1,4 @@
+use ::util::util::decode_hex;
 use base64::{engine::general_purpose, Engine as _};
 use rand::Rng;
 use std::fs;
@@ -7,6 +8,7 @@ use std::time::UNIX_EPOCH;
 use crate::break_xor;
 use crate::mt19937;
 use crate::util::{self, validate_pkcs_padding};
+use rand::distributions::{Alphanumeric, DistString};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
@@ -256,7 +258,6 @@ pub fn challenge22() {
     }
 }
 
-
 pub fn challenge23() {
     let mut mt = mt19937::MT19937::new(1234);
     let mut state = [0u32; 624];
@@ -269,4 +270,124 @@ pub fn challenge23() {
     println!("original: {}, clone:{}", mt.next(), mt_clone.next());
     println!("original: {}, clone:{}", mt.next(), mt_clone.next());
     println!("original: {}, clone:{}", mt.next(), mt_clone.next());
+}
+
+fn prng_encrypt(input: &[u8], rng: &mut mt19937::MT19937) -> Vec<u8> {
+    const block_size: usize = 4usize;
+    let mut result = vec![0u8; input.len()];
+    for i in 0..((input.len() + block_size - 1) / block_size) {
+        let r = rng.next().to_le_bytes();
+        for j in 0..block_size {
+            let idx = j + i * block_size;
+            if idx >= input.len() {
+                break;
+            }
+            result[idx] = input[idx] ^ r[j];
+        }
+    }
+
+    result
+}
+
+fn generate_password_reset_token() -> String {
+    let timestamp: u32 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as u32;
+    let mut rand = mt19937::MT19937::new(timestamp);
+    let vec = (0..5)
+        .flat_map(|_| rand.next().to_le_bytes())
+        .collect::<Vec<u8>>();
+    util::encode_hex(&vec)
+}
+
+fn check_password_reset_token(token: &str) -> bool {
+    let timestamp: u32 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as u32;
+    let mut rand = mt19937::MT19937::new(timestamp);
+    let vec = util::decode_hex(token);
+    match vec {
+        Ok(res) => {
+            if res.len() % 4 != 0 {
+                return false;
+            }
+            for i in 0..res.len() / 4 {
+                let r = rand.next().to_le_bytes();
+                for j in 0..4 {
+                    if res[i * 4 + j] != r[j] {
+                        return false;
+                    }
+                }
+            }
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+pub fn challenge24() {
+    let mut rng = rand::thread_rng();
+    let key: u16 = rng.gen();
+    let prefix = Alphanumeric.sample_string(&mut rng, rand::thread_rng().gen_range(10..20));
+    let plaintext = "AAAAAAAAAAAAAAAAAAAAA";
+    let input = prefix + plaintext;
+    println!("{}, seed: {} ", input, key);
+    let mut mt = mt19937::MT19937::new(key as u32);
+
+    // break seed
+    let mut seed = 0;
+    let res = prng_encrypt(input.as_bytes(), &mut mt);
+    for i in 0..65536 {
+        let mut mt = mt19937::MT19937::new(i);
+        let prefix_len = res.len() - plaintext.len();
+
+        const block_size: usize = 4usize;
+        let mut found = true;
+        for i in 0..((res.len() + block_size - 1) / block_size) {
+            if !found {
+                break;
+            }
+            let r = mt.next().to_le_bytes();
+            for j in 0..block_size {
+                let idx = j + i * block_size;
+                if idx >= res.len() {
+                    break;
+                }
+                if idx < prefix_len {
+                    continue;
+                }
+                if res[idx] != (plaintext.as_bytes()[i] ^ r[j] as u8) {
+                    found = false;
+                    break;
+                }
+            }
+        }
+
+        if found {
+            println!("Detected seed: {}", i);
+            seed = i;
+        }
+    }
+
+    let token = generate_password_reset_token();
+    println!("password reset token: {}", token);
+    // sleep(Duration::new(1, 0));
+    println!("validate result: {}", check_password_reset_token(&token));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_prng_encrypt() {
+        let input = "asdfasdfbdgbkldjglbkdg";
+        let mut mt = mt19937::MT19937::new(1234);
+        let output = prng_encrypt(input.as_bytes(), &mut mt);
+        let mut mt = mt19937::MT19937::new(1234);
+        let output2 = prng_encrypt(&output, &mut mt);
+        assert_eq!(input.as_bytes(), output2);
+    }
 }
